@@ -23,8 +23,19 @@ pending_photos = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Hi! Send me a photo (as a file or image) and I will convert it to an Instagram Story format."
+        "Hi! I create Instagram Stories.\n\n"
+        "1. Send ONE photo for a standard story.\n"
+        "2. Send TWO photos to create a split-screen layout.\n"
+        "3. Use /reset to clear if you made a mistake."
     )
+
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id in pending_photos:
+        del pending_photos[user_id]
+        await update.message.reply_text("Pending photo cleared. You can start a new story.")
+    else:
+        await update.message.reply_text("You don't have any pending photos.")
 
 async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
@@ -94,6 +105,7 @@ if __name__ == '__main__':
 
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reset", reset))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, process_photo))
     print("Bot is running...")
     app.run_polling()
