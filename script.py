@@ -1,50 +1,37 @@
 import argparse
 import os
 import logging
-from PIL import Image, ImageFilter
+from PIL import Image
 
 def process_image_frame(img, target_size):
     """
-    Helper function: Fits an image into target_size with a blurred background.
+    Helper function: Crops an image to fill the target_size (Zoom to Fill).
     Returns the processed PIL Image.
     """
-    # 1. Create the Background (Blurred)
-    # Resize to fill the screen (cropping edges)
-    background = img.copy()
-    background_ratio = target_size[0] / target_size[1]
+    # Calculate aspect ratios
+    target_ratio = target_size[0] / target_size[1]
     img_ratio = img.width / img.height
     
-    if img_ratio > background_ratio:
-        # Image is wider: Crop width
-        new_width = int(img.height * background_ratio)
+    if img_ratio > target_ratio:
+        # Image is wider than target: Crop width
+        new_width = int(img.height * target_ratio)
         offset = (img.width - new_width) // 2
-        background = background.crop((offset, 0, offset + new_width, img.height))
+        img = img.crop((offset, 0, offset + new_width, img.height))
     else:
-        # Image is taller: Crop height
-        new_height = int(img.width / background_ratio)
+        # Image is taller than target: Crop height
+        new_height = int(img.width / target_ratio)
         offset = (img.height - new_height) // 2
-        background = background.crop((0, offset, img.width, offset + new_height))
+        img = img.crop((0, offset, img.width, offset + new_height))
         
-    background = background.resize(target_size, Image.LANCZOS)
-    background = background.filter(ImageFilter.GaussianBlur(radius=50))
+    # Resize to final high-res dimensions
+    img = img.resize(target_size, Image.LANCZOS)
     
-    # 2. Create the Foreground (Sharp)
-    # Resize to fit inside the screen (no cropping)
-    foreground = img.copy()
-    foreground.thumbnail(target_size, Image.LANCZOS)
-    
-    # 3. Combine
-    # Calculate position to center the foreground
-    x = (target_size[0] - foreground.width) // 2
-    y = (target_size[1] - foreground.height) // 2
-    background.paste(foreground, (x, y))
-    
-    return background
+    return img
 
 def create_instagram_story(input_path, output_path):
     """
     Converts an image to Instagram Story format (9:16)
-    by adding a blurred background to fit the aspect ratio.
+    by cropping it to fill the screen.
     """
     try:
         # Open the image
