@@ -20,13 +20,16 @@ logging.basicConfig(
 
 # Store pending photos for users: {user_id: bytes_buffer}
 pending_photos = {}
+# Store user mode preferences: {user_id: 'fit' or 'fill'}
+user_modes = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Hi! I create Instagram Stories.\n\n"
         "1. Send ONE photo for a standard story.\n"
         "2. Send TWO photos to create a split-screen layout.\n"
-        "3. Use /reset to clear if you made a mistake."
+        "3. Use /mode to switch between 'Fit' (blur background) and 'Fill' (crop).\n"
+        "4. Use /reset to clear if you made a mistake."
     )
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,9 +40,17 @@ async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("You don't have any pending photos.")
 
+async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    current_mode = user_modes.get(user_id, 'fit')
+    new_mode = 'fill' if current_mode == 'fit' else 'fit'
+    user_modes[user_id] = new_mode
+    await update.message.reply_text(f"Mode switched to: {new_mode.upper()}")
+
 async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     user_id = user.id
+    mode = user_modes.get(user_id, 'fit')
 
     # Get the photo with the highest resolution
     # If sent as a document (file), use that; otherwise use the last photo in the array
@@ -63,7 +74,7 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             output_buffer = io.BytesIO()
             
             # Create the 2-picture layout
-            create_two_pic_story(first_buffer, current_buffer, output_buffer)
+            create_two_pic_story(first_buffer, current_buffer, output_buffer, mode=mode)
             filename = "story_layout.jpg"
             
         else:
@@ -79,7 +90,7 @@ async def process_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Process as single immediately as well (optional, but good UX so they don't get stuck)
             output_buffer = io.BytesIO()
             current_buffer.seek(0) # Reset pointer for reading
-            create_instagram_story(current_buffer, output_buffer)
+            create_instagram_story(current_buffer, output_buffer, mode=mode)
             filename = "story.jpg"
 
         # Check if output was written
@@ -106,6 +117,7 @@ if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("mode", mode_command))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, process_photo))
     print("Bot is running...")
     app.run_polling()

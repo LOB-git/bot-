@@ -1,37 +1,54 @@
 import argparse
 import os
 import logging
-from PIL import Image
+from PIL import Image, ImageFilter
 
-def process_image_frame(img, target_size):
+def process_image_frame(img, target_size, mode='fit'):
     """
-    Helper function: Crops an image to fill the target_size (Zoom to Fill).
+    Helper function: Fits or Fills an image into target_size.
     Returns the processed PIL Image.
     """
-    # Calculate aspect ratios
+    # 1. Create the Background (Blurred)
+    # Resize to fill the screen (cropping edges)
+    background = img.copy()
     target_ratio = target_size[0] / target_size[1]
     img_ratio = img.width / img.height
     
     if img_ratio > target_ratio:
-        # Image is wider than target: Crop width
+        # Image is wider than target: Crop width to fill background
         new_width = int(img.height * target_ratio)
         offset = (img.width - new_width) // 2
-        img = img.crop((offset, 0, offset + new_width, img.height))
+        background = background.crop((offset, 0, offset + new_width, img.height))
     else:
-        # Image is taller than target: Crop height
+        # Image is taller than target: Crop height to fill background
         new_height = int(img.width / target_ratio)
         offset = (img.height - new_height) // 2
-        img = img.crop((0, offset, img.width, offset + new_height))
+        background = background.crop((0, offset, img.width, offset + new_height))
         
-    # Resize to final high-res dimensions
-    img = img.resize(target_size, Image.LANCZOS)
+    background = background.resize(target_size, Image.LANCZOS)
     
-    return img
+    if mode == 'fill':
+        return background
 
-def create_instagram_story(input_path, output_path):
+    background = background.filter(ImageFilter.GaussianBlur(radius=50))
+    
+    # 2. Create the Foreground (Sharp)
+    # Resize to fit inside the screen (no cropping)
+    foreground = img.copy()
+    foreground.thumbnail(target_size, Image.LANCZOS)
+    
+    # 3. Combine
+    # Calculate position to center the foreground
+    x = (target_size[0] - foreground.width) // 2
+    y = (target_size[1] - foreground.height) // 2
+    background.paste(foreground, (x, y))
+    
+    return background
+
+def create_instagram_story(input_path, output_path, mode='fit'):
     """
     Converts an image to Instagram Story format (9:16)
-    by cropping it to fill the screen.
+    using the specified mode ('fit' or 'fill').
     """
     try:
         # Open the image
@@ -40,7 +57,7 @@ def create_instagram_story(input_path, output_path):
             # Target dimensions for Instagram Story
             target_size = (2160, 3840)
             
-            final_image = process_image_frame(img, target_size)
+            final_image = process_image_frame(img, target_size, mode=mode)
             
             # Save
             final_image.save(output_path, format="JPEG", quality=95, subsampling=0)
@@ -50,7 +67,7 @@ def create_instagram_story(input_path, output_path):
     except Exception as e:
         logging.error(f"Error: {e}")
 
-def create_two_pic_story(input1, input2, output_path):
+def create_two_pic_story(input1, input2, output_path, mode='fit'):
     """
     Creates a vertical split layout with two images.
     """
@@ -65,8 +82,8 @@ def create_two_pic_story(input1, input2, output_path):
             half_size = (2160, 1920)
             
             # Process both images
-            top_image = process_image_frame(img1, half_size)
-            bottom_image = process_image_frame(img2, half_size)
+            top_image = process_image_frame(img1, half_size, mode=mode)
+            bottom_image = process_image_frame(img2, half_size, mode=mode)
             
             # Create canvas and paste
             canvas = Image.new("RGB", canvas_size)
